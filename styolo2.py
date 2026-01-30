@@ -251,8 +251,10 @@ class DASSample:
             if w <= 0 or h <= 0:
                 continue
             
-            # 为了与st-yolo格式一致，同一帧内的所有标签应使用相同的起始时间戳
-            bbox_time_us = self.start_time_us
+            # 计算边界框中心的时间戳
+            y_center = y + h // 2
+            original_time_idx = y_center * DOWNSAMPLE_FACTOR
+            bbox_time_us = self.start_time_us + (original_time_idx * 1000)
             
             labels.append((
                 bbox_time_us,
@@ -509,31 +511,46 @@ class DASConverter:
         # 2. 转换为事件
         events = sample.convert_to_events(binary_mask)
         
-        # 3. 生成标签
-        labels = sample.generate_labels(binary_mask)
-        
-        # 4. 准备标签数据（按照preprocess_dataset.py的格式）
-        labels_per_frame = [labels]  # 每个样本只有一个"帧"
-        frame_timestamps_us = np.array([sample.start_time_us], dtype=np.int64)
+        # 3. 生成标签 (包含每个 bbox 的时间戳)
+        all_labels = sample.generate_labels(binary_mask)
+
+        # 4. 创建多个 frame (每 100ms 一个)
+        frame_interval_us = 100000 # 100ms
+        frame_timestamps_us = np.arange(sample.start_time_us, sample.end_time_us, frame_interval_us)
+
+        # 将 labels 分配到最近的 frame
+        labels_per_frame = [[] for _ in frame_timestamps_us]
+        if len(all_labels) > 0:
+            for lbl in all_labels:
+                # 寻找最近的 frame
+                idx = np.abs(frame_timestamps_us - lbl['t']).argmin()
+                labels_per_frame[idx].append(lbl)
+
+        # 转换回 structured array
+        dtype = all_labels.dtype
+        labels_per_frame = [np.array(l, dtype=dtype) if l else np.array([], dtype=dtype) for l in labels_per_frame]
         
         # 5. 保存标签
         labels_dir = sequence_dir / 'labels_v2'
         labels_dir.mkdir(parents=True, exist_ok=True)
         self.save_labels(labels_dir, labels_per_frame, frame_timestamps_us)
         
-        # 6. 生成事件表示时间戳
+        # 6. 生成事件表示时间戳 (每 50ms 一个)
         ev_repr_timestamps_us = self.generate_ev_repr_timestamps(sample.start_time_us, sample.end_time_us)
         
         # 7. 写入事件表示
         ev_repr_dir = sequence_dir / 'event_representations_v2'
         self.write_event_representations(events, ev_repr_timestamps_us, ev_repr_dir)
         
-        # 8. 生成objframe_idx_2_repr_idx映射
-        # 确保objframe_idx_2_repr_idx的长度与帧数量匹配
-        # 每个样本只有一个帧，所以objframe_idx_2_repr_idx只有一个元素0
-        objframe_idx_2_repr_idx = np.zeros(1, dtype=np.int64)
-        np.save(str(ev_repr_dir / f'stacked_histogram_dt={TS_STEP_EV_REPR_MS}_nbins={EV_REPR_NBINS}/objframe_idx_2_repr_idx.npy'), 
-                objframe_idx_2_repr_idx)
+        # 8. 生成 objframe_idx_2_repr_idx 映射
+        # frame_timestamps_us: [start, start+100, ...]
+        # ev_repr_timestamps_us: [start, start+50, start+100, ...]
+        # 所以映射是 [0, 2, 4, ...]
+        objframe_idx_2_repr_idx = np.searchsorted(ev_repr_timestamps_us, frame_timestamps_us)
+
+        # 保存映射
+        repr_name = f'stacked_histogram_dt={TS_STEP_EV_REPR_MS}_nbins={EV_REPR_NBINS}'
+        np.save(str(ev_repr_dir / repr_name / 'objframe_idx_2_repr_idx.npy'), objframe_idx_2_repr_idx)
     
     def convert(self, train_ratio: float = 0.7, val_ratio: float = 0.2):
         """
