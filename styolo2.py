@@ -20,6 +20,7 @@ os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 # =============================================================
  
 import h5py
+import hdf5plugin
 import numpy as np
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
