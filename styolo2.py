@@ -29,6 +29,7 @@ from tqdm import tqdm
 import glob
 import weakref
 import cv2
+import shutil
 from dataclasses import dataclass, field
 from enum import Enum, auto
 import sys
@@ -519,16 +520,33 @@ class DASConverter:
         frame_timestamps_us = np.arange(sample.start_time_us, sample.end_time_us, frame_interval_us)
 
         # 将 labels 分配到最近的 frame
-        labels_per_frame = [[] for _ in frame_timestamps_us]
+        labels_dict = {ts: [] for ts in frame_timestamps_us}
         if len(all_labels) > 0:
             for lbl in all_labels:
                 # 寻找最近的 frame
                 idx = np.abs(frame_timestamps_us - lbl['t']).argmin()
-                labels_per_frame[idx].append(lbl)
+                best_ts = frame_timestamps_us[idx]
+                # 重要：将 label 的时间戳更新为 frame 的时间戳，以满足 labels.py 中的 unique() 校验
+                lbl_copy = lbl.copy()
+                lbl_copy['t'] = best_ts
+                labels_dict[best_ts].append(lbl_copy)
 
-        # 转换回 structured array
+        # 过滤掉没有 label 的 frame (st-yolo 的 ObjectLabelFactory 不支持空帧)
         dtype = all_labels.dtype
-        labels_per_frame = [np.array(l, dtype=dtype) if l else np.array([], dtype=dtype) for l in labels_per_frame]
+        filtered_frames = []
+        filtered_labels = []
+        for ts in frame_timestamps_us:
+            if len(labels_dict[ts]) > 0:
+                filtered_frames.append(ts)
+                filtered_labels.append(np.array(labels_dict[ts], dtype=dtype))
+
+        # 如果该 sequence 一个有效帧都没有，则跳过
+        if not filtered_frames:
+            shutil.rmtree(sequence_dir)
+            return
+
+        frame_timestamps_us = np.array(filtered_frames, dtype=np.int64)
+        labels_per_frame = filtered_labels
         
         # 5. 保存标签
         labels_dir = sequence_dir / 'labels_v2'
