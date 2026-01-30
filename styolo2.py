@@ -15,7 +15,6 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 # =============================================================
@@ -31,12 +30,15 @@ import weakref
 import cv2
 from dataclasses import dataclass, field
 from enum import Enum, auto
+import sys
+import torch
+from datetime import datetime
  
 # 导入st-yolo的表示方法
-# import sys
-# sys.path.append('./applications/dvsdetection/st-yolo')
-from applications.dvsdetection.st_yolo.data.utils.representations import StackedHistogram, RepresentationBase
-from applications.dvsdetection.st_yolo.utils.preprocessing import _blosc_opts
+# 使用insert(0, ...) 确保优先从st-yolo目录导入utils，避免与根目录的utils冲突
+sys.path.insert(0, str(Path(__file__).parent / 'applications/dvsdetection/st-yolo'))
+from data.utils.representations import StackedHistogram, RepresentationBase
+from utils.preprocessing import _blosc_opts
  
  
 # ======== DAS数据参数 ========
@@ -248,10 +250,8 @@ class DASSample:
             if w <= 0 or h <= 0:
                 continue
             
-            # 计算边界框中心的时间戳
-            y_center = y + h // 2
-            original_time_idx = y_center * DOWNSAMPLE_FACTOR
-            bbox_time_us = self.start_time_us + (original_time_idx * 1000)
+            # 为了与st-yolo格式一致，同一帧内的所有标签应使用相同的起始时间戳
+            bbox_time_us = self.start_time_us
             
             labels.append((
                 bbox_time_us,
@@ -351,17 +351,15 @@ class DASConverter:
         
         print(f"创建样本: 总长度{total}点, 窗口{WINDOW_SIZE_POINTS_DS}点, 步长{STEP_SIZE_POINTS_DS}点")
         
-        start_time_us = 0
+        global_start_time_us = 0
         for start_idx in range(0, total - WINDOW_SIZE_POINTS_DS + 1, STEP_SIZE_POINTS_DS):
             sample = DASSample(
                 sample_id=len(samples),
                 start_time_idx_ds=start_idx,
                 das_data_ds=data,
-                global_start_time_us=start_time_us
+                global_start_time_us=global_start_time_us
             )
             samples.append(sample)
-            # 更新全局起始时间
-            start_time_us += (STEP_SIZE_POINTS_DS * 10000)  # 100Hz = 10ms per sample
         
         print(f"总共创建 {len(samples)} 个样本")
         return samples
@@ -475,7 +473,6 @@ class DASConverter:
                 
                 # 构造事件表示
                 if len(window_x) > 0:
-                    import torch
                     ev_repr_tensor = ev_repr.construct(
                         torch.from_numpy(window_x),
                         torch.from_numpy(window_y),
@@ -603,7 +600,7 @@ class DASConverter:
         
         dataset_info = {
             "dataset_name": "DAS-ST-YOLO",
-            "creation_time": str(Path.cwd()),
+            "creation_time": datetime.now().isoformat(),
             "parameters": {
                 "original_sampling_rate_hz": ORIGINAL_SAMPLING_RATE_HZ,
                 "downsampled_sampling_rate_hz": DOWNSAMPLED_SAMPLING_RATE_HZ,
