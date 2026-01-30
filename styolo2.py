@@ -172,9 +172,23 @@ class DASSample:
         self.width = NUM_CHANNELS  # 50
     
     def detect_anomalies(self, threshold_percentile: float = 95.0):
-        """检测异常"""
-        threshold = np.percentile(self.data, threshold_percentile)
-        binary_mask = self.data > threshold
+        """
+        检测异常 (针对 tap 事件优化)
+
+        使用通道级归一化 (Z-score)，使检测对局部脉冲更敏感，
+        并能适应不同通道背景噪声水平的差异。
+        """
+        # 计算通道均值和标准差
+        channel_means = np.mean(self.data, axis=0)
+        channel_stds = np.std(self.data, axis=0) + 1e-6
+
+        # Z-score 归一化
+        norm_data = (self.data - channel_means) / channel_stds
+
+        # 基于归一化后的数据进行阈值检测
+        threshold = np.percentile(norm_data, threshold_percentile)
+        binary_mask = norm_data > threshold
+
         return np.ascontiguousarray(binary_mask), threshold
     
     def convert_to_events(self, binary_mask: np.ndarray) -> Dict[str, np.ndarray]:
@@ -204,7 +218,7 @@ class DASSample:
         }
     
     def generate_labels(self, binary_mask: np.ndarray, 
-                       min_bbox_area: int = 10,
+                       min_bbox_area: int = 3,
                        max_bbox_area: int = 300) -> np.ndarray:
         """
         生成标注标签
