@@ -51,6 +51,11 @@ STEP_SIZE_POINTS_DS = int(STEP_SIZE_SEC * DOWNSAMPLED_SAMPLING_RATE_HZ) # 50 poi
 
 NUM_CHANNELS = 50
 
+# ST-YOLO requires multiples of 32 for resolution
+# We pad 250 -> 256 and 50 -> 64
+PADDED_HEIGHT = 256
+PADDED_WIDTH = 64
+
 # Event Representation Parameters
 TS_STEP_EV_REPR_MS = 50 # 50ms per bin
 EV_REPR_NBINS = 10 # StackedHistogram bins
@@ -116,7 +121,6 @@ class DASSequenceProcessor:
     def process_file(self, h5_path: Path, split: str):
         print(f"Processing {h5_path.name}...")
         with h5py.File(h5_path, 'r') as f:
-            # Assuming data is in keys that are numeric or a specific 'data' key
             keys = sorted(f.keys(), key=lambda x: int(x) if x.isdigit() else 0)
             if not keys: return
 
@@ -125,14 +129,10 @@ class DASSequenceProcessor:
                 raw_data.append(f[k][:].copy())
 
             full_data = np.abs(np.concatenate(raw_data, axis=0).astype(np.float32))
-
-            # Downsample
             ds_data = self.downsample(full_data)
-            # Normalize
             norm_data = self.normalize(ds_data)
 
             total_points = len(norm_data)
-
             for start_idx in range(0, total_points - WINDOW_SIZE_POINTS_DS + 1, STEP_SIZE_POINTS_DS):
                 window_data = norm_data[start_idx : start_idx + WINDOW_SIZE_POINTS_DS]
                 self.create_sequence(window_data, split)
@@ -144,19 +144,16 @@ class DASSequenceProcessor:
         seq_dir = self.output_dir / split / f"sequence_{seq_id:06d}"
         seq_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Detection & Labeling
-        # We detect anomalies in the WHOLE window but only label based on the LAST frame's context
-        # In ST-YOLO, we typically have one label for one 'representation'
-        # Here we follow the logic: The labeled frame is at the END of the window.
+        # 1. Padding to Multiples of 32
+        # window_data is (250, 50). We pad it to (256, 64)
+        padded_window = np.zeros((PADDED_HEIGHT, PADDED_WIDTH), dtype=np.float32)
+        padded_window[:WINDOW_SIZE_POINTS_DS, :NUM_CHANNELS] = window_data
 
         threshold = np.percentile(window_data, self.threshold_percentile)
-        binary_mask = window_data > threshold
+        binary_mask = padded_window > threshold
 
-        # Convert to events (x, y, p, t)
-        # y is time in DS points, x is channel
+        # 2. Convert to events (x, y, p, t)
         y_idx, x_idx = np.where(binary_mask)
-        # Timestamps in microseconds. 50Hz -> 20ms per point.
-        # Let's start sequence at t=0
         t_us = y_idx * (1000000 // DOWNSAMPLED_SAMPLING_RATE_HZ)
         events = {
             'x': x_idx.astype(np.int64),
@@ -165,65 +162,59 @@ class DASSequenceProcessor:
             't': t_us.astype(np.int64)
         }
 
-        # Generate labels for the LAST frame (t = WINDOW_SIZE_SEC)
-        # Actually ST-YOLO expects labels at specific timestamps.
-        # We'll put a label frame at the very end of the 5s window.
+        # 3. Labeling
+        # Labeled frame at the END of the window (t = WINDOW_SIZE_SEC)
         last_frame_ts_us = int(WINDOW_SIZE_SEC * 1000000)
-
-        # To find labels, we look at the last portion of the mask
-        # Let's say any anomaly in the last 200ms counts as a label for the end frame
         lookback_points = int(0.2 * DOWNSAMPLED_SAMPLING_RATE_HZ)
-        last_mask_slice = binary_mask[-max(1, lookback_points):]
 
+        # We only look at the last portion of the ORIGINAL window points for detection
+        # but components can span the entire padded window
         labels = []
-        if np.any(last_mask_slice):
-            # Connected components on the whole window mask to get consistent bboxes
-            num_labels, label_map, stats, _ = cv2.connectedComponentsWithStats(binary_mask.astype(np.uint8), connectivity=8)
-            for i in range(1, num_labels):
-                area = stats[i, cv2.CC_STAT_AREA]
-                if area < self.min_area: continue
+        num_labels, label_map, stats, _ = cv2.connectedComponentsWithStats(binary_mask.astype(np.uint8), connectivity=8)
+        for i in range(1, num_labels):
+            area = stats[i, cv2.CC_STAT_AREA]
+            if area < self.min_area: continue
 
-                # Check if this component intersects with our "last frame" lookback
-                y_start = stats[i, cv2.CC_STAT_TOP]
-                y_end = y_start + stats[i, cv2.CC_STAT_HEIGHT]
+            y_start = stats[i, cv2.CC_STAT_TOP]
+            y_end = y_start + stats[i, cv2.CC_STAT_HEIGHT]
 
-                if y_end >= (WINDOW_SIZE_POINTS_DS - lookback_points):
-                    # This component is active near the end
-                    x = float(stats[i, cv2.CC_STAT_LEFT])
-                    y = float(stats[i, cv2.CC_STAT_TOP])
-                    w = float(stats[i, cv2.CC_STAT_WIDTH])
-                    h = float(stats[i, cv2.CC_STAT_HEIGHT])
-                    labels.append((last_frame_ts_us, x, y, w, h, 0, 1.0))
+            # If the component intersects with the end of the window (last 200ms)
+            if y_end >= (WINDOW_SIZE_POINTS_DS - lookback_points):
+                x = float(stats[i, cv2.CC_STAT_LEFT])
+                y = float(stats[i, cv2.CC_STAT_TOP])
+                w = float(stats[i, cv2.CC_STAT_WIDTH])
+                h = float(stats[i, cv2.CC_STAT_HEIGHT])
+                labels.append((last_frame_ts_us, x, y, w, h, 0, 1.0))
 
         # Save Labels
         labels_dir = seq_dir / "labels_v2"
         labels_dir.mkdir(exist_ok=True)
-
         dtype = [('t', 'i8'), ('x', 'f4'), ('y', 'f4'), ('w', 'f4'), ('h', 'f4'), ('class_id', 'i4'), ('class_confidence', 'f4')]
         labels_arr = np.array(labels, dtype=dtype)
 
-        # In ST-YOLO, objframe_idx_2_label_idx points to the start index in the 'labels' array for each frame.
-        # Since we have only one labeled frame per sequence, it always starts at index 0.
-        np.savez(labels_dir / "labels.npz", labels=labels_arr, objframe_idx_2_label_idx=np.array([0], dtype=np.int64))
+        # In ST-YOLO, objframe_idx_2_label_idx requires N+1 elements for N frames to allow slicing.
+        # Since we have 1 labeled frame per sequence, we provide [0, total_labels].
+        objframe_idx_2_label_idx = np.array([0, len(labels_arr)], dtype=np.int64)
+        np.savez(labels_dir / "labels.npz", labels=labels_arr, objframe_idx_2_label_idx=objframe_idx_2_label_idx)
         np.save(labels_dir / "timestamps_us.npy", np.array([last_frame_ts_us], dtype=np.int64))
 
-        # 2. Event Representations
+        # 4. Event Representations
         ev_repr_dir = seq_dir / "event_representations_v2"
         ev_repr_name = f"stacked_histogram_dt={TS_STEP_EV_REPR_MS}_nbins={EV_REPR_NBINS}"
         out_repr_dir = ev_repr_dir / ev_repr_name
         out_repr_dir.mkdir(parents=True, exist_ok=True)
 
-        # Generate timestamps for representations: from 0 to 5s with 50ms step
+        # Representations cover the full 5 seconds (100 bins)
+        # Note: timestamps_us in ST-YOLO are the END timestamps of each bin
         repr_timestamps_us = np.arange(TS_STEP_EV_REPR_MS, int(WINDOW_SIZE_SEC * 1000) + 1, TS_STEP_EV_REPR_MS, dtype=np.int64) * 1000
         np.save(out_repr_dir / "timestamps_us.npy", repr_timestamps_us)
 
-        # objframe_idx_2_repr_idx: our single labeled frame is at last_frame_ts_us
-        # which corresponds to the last representation index
+        # Map our labeled frame (at 5s) to the last representation bin (index 99)
         objframe_idx_2_repr_idx = np.array([len(repr_timestamps_us) - 1], dtype=np.int64)
         np.save(out_repr_dir / "objframe_idx_2_repr_idx.npy", objframe_idx_2_repr_idx)
 
-        # Construct H5
-        ev_repr_obj = StackedHistogram(bins=EV_REPR_NBINS, height=WINDOW_SIZE_POINTS_DS, width=NUM_CHANNELS)
+        # Construct H5 using PADDED resolution
+        ev_repr_obj = StackedHistogram(bins=EV_REPR_NBINS, height=PADDED_HEIGHT, width=PADDED_WIDTH)
         shape = ev_repr_obj.get_shape()
 
         with H5Writer(out_repr_dir / "event_representations.h5", "data", shape, np.uint8) as writer:
@@ -261,7 +252,6 @@ def main():
 
     processor = DASSequenceProcessor(output_dir, threshold_percentile=args.threshold, min_area=args.min_area)
 
-    # Split files into train/val/test
     n = len(input_files)
     train_files = input_files[:int(0.7*n)]
     val_files = input_files[int(0.7*n):int(0.9*n)]

@@ -2,14 +2,15 @@ defaults:
   - base
 
 name: das
-# You may need to update this path to the actual location of your generated dataset
+# Update this path if necessary to the output_dir you chose.
 path: ./data/das_dataset/
 ev_repr_name: 'stacked_histogram_dt=50_nbins=10'
 # sequence_length defines how many historical representation bins the SNN uses.
-# At 50ms per bin, a sequence of 10-20 (0.5s-1s history) is often effective.
-sequence_length: 20
-# Height = time points (250), Width = channels (50)
-resolution_hw: [250, 50]
+# Each bin is 50ms, so 100 bins = 5 seconds.
+sequence_length: 100
+# Input resolution must be multiples of 32 for YOLO backbones.
+# We pad your 250 (time) x 50 (channels) to 256 x 64 in the generation script.
+resolution_hw: [256, 64]
 downsample_by_factor_2: False
 # Our dataset only contains labels for the end of the window.
 only_load_end_labels: True
