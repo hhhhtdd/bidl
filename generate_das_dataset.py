@@ -237,7 +237,7 @@ class DASSequenceProcessor:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_glob", default="data/H5/*.h5")
-    parser.add_argument("--output_dir", default="data/das_dataset")
+    parser.add_argument("--output_dir", default="data/styolo_dataset")
     parser.add_argument("--threshold", type=float, default=95.0)
     parser.add_argument("--min_area", type=int, default=4)
     args = parser.parse_args()
