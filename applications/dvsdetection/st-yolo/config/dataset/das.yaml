@@ -3,13 +3,13 @@ defaults:
 
 name: das
 # You may need to update this path to the actual location of your generated dataset
-path: ./data/das_dataset/
+path: ./data/st_yolo_das_v2/
 ev_repr_name: 'stacked_histogram_dt=50_nbins=10'
 # sequence_length defines how many historical representation bins the SNN uses.
-# At 50ms per bin, a sequence of 10-20 (0.5s-1s history) is often effective.
-sequence_length: 20
-# Height = time points (250), Width = channels (50)
-resolution_hw: [250, 50]
+# At 50ms per bin, a sequence of 51 covers 2.55s.
+sequence_length: 51
+# Height = time points (256), Width = channels (64)
+resolution_hw: [256, 64]
 downsample_by_factor_2: False
 # Our dataset only contains labels for the end of the window.
 only_load_end_labels: True
