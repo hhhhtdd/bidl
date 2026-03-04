@@ -221,6 +221,11 @@ class Module(pl.LightningModule):
         assert sequence_len > 0
         batch_size = len(sparse_obj_labels[0])
 
+        # =============  修改  =======
+        print(f"[DEBUG] Batch keys: {data.keys()}")
+        print(f"[DEBUG] Sparse obj labels type: {type(sparse_obj_labels)}")
+        print(f"[DEBUG] Sequence length: {sequence_len}")
+        
 
         if self.mode_2_batch_size[mode] is None:
             self.mode_2_batch_size[mode] = batch_size
@@ -247,6 +252,7 @@ class Module(pl.LightningModule):
 
             if collect_predictions:
                 current_labels, valid_batch_indices = sparse_obj_labels[tidx].get_valid_labels_and_batch_indices()
+                print(f"[DEBUG] Timestep {tidx}: Found {len(current_labels)} labels")
                 # Store backbone features that correspond to the available labels.
                 if len(current_labels) > 0:
                     backbone_feature_selector.add_backbone_features(backbone_features=backbone_features,
@@ -285,6 +291,14 @@ class Module(pl.LightningModule):
             self.mode_2_psee_evaluator[mode].add_labels(loaded_labels_proph)
             self.mode_2_psee_evaluator[mode].add_predictions(yolox_preds_proph)
 
+
+        # 在返回前添加
+        if len(obj_labels) == 0:
+            print("[DEBUG] No labels found in entire sequence! Skipping...")
+            return {ObjDetOutput.SKIP_VIZ: True}
+        
+        # 检查 started_training
+        print(f"[DEBUG] started_training: {self.started_training}")
         return output
 
     def validation_step(self, batch: Any, batch_idx: int) -> Optional[STEP_OUTPUT]:
