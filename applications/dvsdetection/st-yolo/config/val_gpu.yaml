@@ -3,7 +3,8 @@ defaults:
   - model: yolodet
   - optional model/dataset: ${model}_${dataset}
 
-checkpoint: epoch=001-step=394428-val_AP=0.44.ckpt
+checkpoint: F:\hht\bidl\applications\dvsdetection\st-yolo\lightning_logs\st_yolo_das\version_2\checkpoints\last_epoch=608-step=48720.ckpt
+# checkpoint: epoch=001-step=394428-val_AP=0.44.ckpt
 use_test_set: True
 hardware:
   num_workers:

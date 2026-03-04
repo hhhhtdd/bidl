@@ -42,7 +42,7 @@ def dynamically_modify_train_config(config: DictConfig):
             else:
                 print(f'{backbone_name=} not available')
                 raise NotImplementedError
-            num_classes = 2 if dataset_name == 'gen1' else 3
+            num_classes = 1 if dataset_name == 'gen1' else 3
             mdl_cfg.head.num_classes = num_classes
             print(f'Set {num_classes=} for detection head')
         elif mdl_name == 'yolodet':

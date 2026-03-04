@@ -8,3 +8,28 @@ sequence_length: 20
 resolution_hw: [400, 50]
 downsample_by_factor_2: False
 only_load_end_labels: True
+
+
+# 采样配置 - Windows 使用 random 模式避免多进程问题
+train:
+  sampling: 'random'  # 改为 random，避免 mixed 模式的多进程要求
+  random:
+    weighted_sampling: false
+
+eval:
+  sampling: 'random'  # 也改为 random
+
+# 覆盖 base 的数据增强配置
+data_augmentation:
+  random:
+    prob_hflip: 0.5
+    rotate:
+      prob: 0
+    zoom:
+      prob: 0
+  stream:
+    prob_hflip: 0.5
+    rotate:
+      prob: 0
+    zoom:
+      prob: 0

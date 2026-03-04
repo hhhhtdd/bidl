@@ -3,4 +3,4 @@ defaults:
   - dataset: gen1
   # - model: rnndet
   - model: yolodet
-  - optional model/dataset: ${model}_${dataset}
+  # - optional model/dataset: ${model}_${dataset}

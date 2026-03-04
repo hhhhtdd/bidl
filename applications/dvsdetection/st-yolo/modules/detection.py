@@ -220,6 +220,8 @@ class Module(pl.LightningModule):
         sequence_len = len(ev_tensor_sequence)
         assert sequence_len > 0
         batch_size = len(sparse_obj_labels[0])
+
+
         if self.mode_2_batch_size[mode] is None:
             self.mode_2_batch_size[mode] = batch_size
         else:
@@ -259,11 +261,16 @@ class Module(pl.LightningModule):
         selected_backbone_features = backbone_feature_selector.get_batched_backbone_features()
         predictions, _ = self.mdl.forward_detect(backbone_features=selected_backbone_features)
 
+        print(f"Raw predictions shape: {predictions.shape}")
+        print(f"Objectness range: {predictions[:, 4].min():.6f} - {predictions[:, 4].max():.6f}")
+        print(f"Class score range: {predictions[:, 5].min():.6f} - {predictions[:, 5].max():.6f}")
+
         pred_processed = postprocess(prediction=predictions,
                                      num_classes=self.mdl_config.head.num_classes,
                                      conf_thre=self.mdl_config.postprocess.confidence_threshold,
                                      nms_thre=self.mdl_config.postprocess.nms_threshold)
-
+        num_dets = sum(p.shape[0] if p is not None else 0 for p in pred_processed)
+        print(f"After postprocess: {num_dets} detections")
         loaded_labels_proph, yolox_preds_proph = to_prophesee(obj_labels, pred_processed)
 
         # For visualization, we only use the last item (per batch).

@@ -42,12 +42,17 @@ class ObjectLabelBase:
         y1 = th.clamp(self.y + self.h, min=0, max=ht - 1)
         w = x1 - x0
         h = y1 - y0
-        assert th.all(w > 0)
-        assert th.all(h > 0)
-        self.x = x0
-        self.y = y0
-        self.w = w
-        self.h = h
+        
+        # 先过滤掉无效的边界框，再更新
+        keep = (w > 0) & (h > 0)
+        self.object_labels = self.object_labels[keep]
+        
+        # 如果还有边界框，更新坐标
+        if len(self.object_labels) > 0:
+            self.x = th.clamp(self.x, min=0, max=wd - 1)
+            self.y = th.clamp(self.y, min=0, max=ht - 1)
+            self.w = th.clamp(self.x + self.w, min=0, max=wd - 1) - self.x
+            self.h = th.clamp(self.y + self.h, min=0, max=ht - 1) - self.y
 
     def remove_flat_labels_(self):
         keep = (self.w > 0) & (self.h > 0)

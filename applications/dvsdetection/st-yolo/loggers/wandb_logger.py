@@ -223,14 +223,30 @@ class WandbLogger(Logger):
         if self._checkpoint_callback and self._log_model:
             self._scan_and_log_checkpoints(self._checkpoint_callback, self._save_last)
 
+    # def _get_public_run(self):
+    #     if self._public_run is None:
+    #         experiment = self.experiment
+    #         runpath = experiment._entity + '/' + experiment._project + '/' + experiment._run_id
+    #         api = wandb.Api()
+    #         self._public_run = api.run(path=runpath)
+    #     return self._public_run
+
+
     def _get_public_run(self):
         if self._public_run is None:
             experiment = self.experiment
-            runpath = experiment._entity + '/' + experiment._project + '/' + experiment._run_id
+            # 兼容新旧版本 wandb
+            entity = getattr(experiment, 'entity', None) or getattr(experiment, '_entity', None)
+            project = getattr(experiment, 'project', None) or getattr(experiment, '_project', None)
+            run_id = getattr(experiment, 'id', None) or getattr(experiment, '_run_id', None)
+            if entity and project and run_id:
+                runpath = entity + '/' + project + '/' + run_id
+            else:
+                # 如果无法获取属性，使用替代方法
+                runpath = experiment.path
             api = wandb.Api()
             self._public_run = api.run(path=runpath)
         return self._public_run
-
     def _num_logged_artifact(self):
         public_run = self._get_public_run()
         return len(public_run.logged_artifacts())

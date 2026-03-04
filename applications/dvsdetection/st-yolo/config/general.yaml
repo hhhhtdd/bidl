@@ -25,18 +25,18 @@ batch_size:
   eval: 8
 hardware:
   num_workers:
-    train: 6
-    eval: 2
+    train: 0
+    eval: 0
   gpus: 0 # Either a single integer (e.g. 3) or a list of integers (e.g. [3,5,6])
   dist_backend: "nccl"
 logging:
-  ckpt_every_n_epochs: 1
+  ckpt_every_n_epochs: 10
   train:
     metrics:
       compute: false
       detection_metrics_every_n_steps: null # Optional[int] -> null: every train epoch, int: every N steps
     log_model_every_n_steps: 5000
-    log_every_n_steps: 500
+    log_every_n_steps: 5000
     high_dim:
       enable: True
       every_n_steps: 5000
@@ -44,7 +44,7 @@ logging:
   validation:
     high_dim:
       enable: True
-      every_n_epochs: 1
+      every_n_epochs: 10
       n_samples: 8
 wandb:
   #   How to use:
@@ -58,5 +58,5 @@ wandb:
   artifact_name: null # Name of checkpoint/artifact. Required for resuming. E.g. USERNAME/PROJECTNAME/checkpoint-1grv5kg6-last:v15
   artifact_local_file: null # If specified, will use the provided local filepath instead of downloading it. Required if resuming with DDP.
   resume_only_weights: False
-  group_name:  Gen1 # Specify group name of the run
-  project_name: RVTorig
+  group_name:  null # Specify group name of the run
+  project_name: null

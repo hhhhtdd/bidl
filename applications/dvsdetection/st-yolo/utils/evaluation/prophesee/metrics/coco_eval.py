@@ -22,7 +22,7 @@ except ImportError:
 print(f'Using {coco_eval_type} detection evaluation')
 
 
-def evaluate_detection(gt_boxes_list, dt_boxes_list, classes=("car", "pedestrian"), height=240, width=304,
+def evaluate_detection(gt_boxes_list, dt_boxes_list, classes=("car", "pedestrian"), height=400, width=50,
                        time_tol=50000, return_aps: bool = True):
     """
     Compute detection KPIs on list of boxes in the numpy format, using the COCO python API
@@ -100,7 +100,9 @@ def _coco_eval(gts, detections, height, width, labelmap=("car", "pedestrian"), r
     """
     categories = [{"id": id + 1, "name": class_name, "supercategory": "none"}
                   for id, class_name in enumerate(labelmap)]
-
+    
+    print(f"Evaluating {len(gts)} frames with {len(detections)} detections \n")
+    print(f'detections: {detections} \n')
     num_detections = 0
     for detection in detections:
         num_detections += detection.size
@@ -111,7 +113,7 @@ def _coco_eval(gts, detections, height, width, labelmap=("car", "pedestrian"), r
 
     if num_detections == 0:
         # Corner case at the very beginning of the training.
-        print('no detections for evaluation found.')
+        print('no detections for evaluation found.\n')
         return out_dict if return_aps else None
 
     dataset, results = _to_coco_format(gts, detections, categories, height=height, width=width)
