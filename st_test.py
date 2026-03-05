@@ -80,7 +80,7 @@ STEP_SIZE_POINTS_DS = int(STEP_SIZE_MS * DOWNSAMPLED_SAMPLING_RATE_HZ / 1000)  #
 NUM_CHANNELS = 50
 
 # 事件表示参数
-TS_STEP_EV_REPR_MS = 200    # 每200ms生成一个事件表示
+TS_STEP_EV_REPR_MS = 50    # 每50ms生成一个事件表示
 EV_REPR_NBINS = 10         # StackedHistogram的bin数量
 
 
@@ -767,11 +767,11 @@ def main():
     parser = argparse.ArgumentParser(description='DAS瀑布图转st-yolo格式（优化版）')
     parser.add_argument('--input_pattern', default='data/H5/*.h5', 
                         help='输入H5文件模式（如: data/H5/*.h5）')
-    parser.add_argument('--output_dir', default='data/st_yolo_das', 
+    parser.add_argument('--output_dir', default=f'data/st_yolo_{TS_STEP_EV_REPR_MS}ms_{EV_REPR_NBINS}bins', 
                         help='输出目录')
-    parser.add_argument('--threshold_percentile', type=float, default=97.0, 
+    parser.add_argument('--threshold_percentile', type=float, default=98.0, 
                         help='异常检测阈值百分位（默认97）')
-    parser.add_argument('--min_bbox_area', type=int, default=20, 
+    parser.add_argument('--min_bbox_area', type=int, default=30, 
                         help='最小边界框面积（默认20）')
     parser.add_argument('--max_bbox_area', type=int, default=1000, 
                         help='最大边界框面积（默认1000）')

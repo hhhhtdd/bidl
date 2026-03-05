@@ -67,7 +67,7 @@ class PropheseeEvaluator:
                                 gt_boxes_list=labels,
                                 height=img_height,
                                 width=img_width,
-                                apply_bbox_filters=True,
+                                apply_bbox_filters=False,
                                 downsampled_by_2=self.downsample_by_2,
                                 camera=self.dataset)
         return metrics

@@ -14,7 +14,7 @@ def evaluate_list(result_boxes_list,
     assert camera in {'gen1', 'gen4'}
 
     if camera == 'gen1':
-        classes = ("car", "pedestrian")
+        classes = ("excavator", "pedestrian")
     elif camera == 'gen4':
         classes = ("pedestrian", "two-wheeler", "car")
     else:
