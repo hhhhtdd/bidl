@@ -76,12 +76,6 @@ def main(config: DictConfig):
     # ---------------------
     data_module = fetch_data_module(config=config)
 
-    data_module.setup('fit')
-    val_loader = data_module.val_dataloader()
-    print(f"Validation loader length: {len(val_loader)}")
-    for batch in val_loader:
-        print(f"Batch content: {batch.keys()}")
-        break
     # ---------------------
     # Logging and Checkpoints - 使用TensorBoard替代wandb
     # ---------------------
